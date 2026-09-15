@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+venv/
+env/
+*.egg-info/
+
+# Jupyter
+.ipynb_checkpoints/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Local/secret config - never commit data paths, credentials, or tokens
+config.local.*
+.env
+
+# Editor
+.vscode/
+.idea/
