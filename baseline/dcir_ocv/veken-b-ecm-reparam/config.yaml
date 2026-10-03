@@ -1,0 +1,30 @@
+# Values decided with DJ (2026-10-01/02). README.md explains each one.
+
+run_date: "2026-10-02"                 # name of the outputs/ folder
+
+soc:
+  # SOC = 1 - dQ/Q(T). Q(T) from cell.yaml capacity_vs_temperature (team values, kept on purpose).
+  capacity_ah: {15: 171.69, 25: 172.4, 45: 177.73, 60: 179.08}
+
+relaxation:
+  theta_mV_per_h: 1.0                  # a rest has relaxed when |dV/dt| < this
+  noise_uV: {"0.1s": 31.5, "1s": 36.7, "300s": 48.0}   # measured voltage noise per logging interval
+  min_samples_300s: 4                  # shortest slope window on 300 s-logged rests
+
+temperature:
+  rise_cap_K: 2.0                      # reject a window whose cell temperature changes more than this
+  rise_block_s: 600                    # temperature change = range of 10-minute means (probe noise ~0.3 K)
+  mass_kg: 4.69                        # self-heating bound (cell.yaml)
+  cp_J_kgK: 917
+
+ocv:
+  hppc_min_gap_soc: 0.01               # use an HPPC rest only if no GITT point lies within 1 % SOC
+  gap_correction_soc: [0.1, 0.9]       # 25 C: SOC range where the measured charge/discharge gap corrects the borrowed one
+  method_25C: shape_15_45              # 25 C discharge curve: 15/45 C shape bent through the 25 C GITT points (tested 2026-10-02, kept)
+  soc0_rule: normal_discharge_rest     # SOC 0 = rested voltage after the normal-rate discharge to 1.5 V (tested 2026-10-02, kept)
+
+hppc:
+  bounds: {R0_ohm: [0.0, 0.005], R1_ohm: [0.0, 0.05], tau_s: [0.05, 20000]}
+  # Team-OCV set only: the 45 C HPPC cells' 2 h rest at 25 % SOC sits 9-10 mV above the team OCV, so the
+  # 25 -> 20 % move fits R1 ~ 0 on both cells. Left out (DJ, 2026-10-02); 20 % is interpolated from its neighbours.
+  team_ocv_leave_out: [{T: 45, soc: 0.20}]

@@ -1,0 +1,191 @@
+cell_id: Veken170Ah-HT-B
+display_name: "Veken 170Ah HT -B (HP01 — Hard Carbon Anode)"
+version: "0.4.0"
+
+chemistry: NFPP_HardCarbon
+electrolyte: HP01
+format: prismatic
+manufacturer: Veken
+
+# -B DATAPACK STATUS (2026-10-02): nominal values are MEASURED -B data
+# (mass / specific heat / capacity); OCV (GITT reparam, 2026-10-02) and R0 / R1 / C1
+# (HPPC reparam fitted on that OCV, 2026-10-02) are -B files. 
+# 
+# The entropy data for the -B cell is an approximation of the dU/dT coefficients from our RPTs. We have not run an entropy test on the -B cell b/c the test runs for over 30 days and we have very limited channel capacity (at the best of times) in the lab. 
+# Dan W. ran a correlation study on the OCV vs. SOC from RPTs compared to the true entropy test and they were well correlated, aside from the low SOC region (10%-0% SOC). 
+
+# Accuracy/error bands (2026-08 test data): measured values carry
+# `{nominal, min, max}` maps; loaders read `nominal` (bare scalars still
+# accepted for band-less keys); sensitivity / Monte Carlo tooling consumes
+# min/max.
+nominal:
+  capacity_ah: 172.4     # no distribution (band removed 2026-08-17, was -0/+4.7678)
+  # Lower cutoff voltage is a rating-dependent PRODUCT setting, not a cell
+  # property — it lives in the product line's unit.yaml power_ratings block
+  # (P/4: 1.8 V, P/2: 2.3 V) and reaches load_cell via its voltage_min_v kwarg.
+  voltage_max_v: 3.45
+  voltage_nominal_v: 2.85
+  mass_kg: {nominal: 4.69, min: 4.684, max: 4.696}                # +/- 0.006 kg
+  specific_heat_j_kg_k: {nominal: 917, min: 862, max: 972}        # +/- 55 J/kg-K
+  # Physics self-discharge (fraction of SOC lost per 30-day month). Also the
+  # single source for the reported daily-% self-discharge (derived as
+  # rate/30*100 in the runner), so the two can't drift.
+  self_discharge_rate_per_month: 0.0035
+
+# Cell-model calibration constants (reference-model values, carried from -A).
+model_constants:
+  # Heat-gen scales (1.0 = physical). Fit 2026-09-09 with the FULL -B
+  # datapack (-B OCV + R0/R1/C1) against the 2026-05 B2 module chamber test
+  # (b2_module_cycling_correlation.ipynb, 22 TCs, one 11-h window; Rca free
+  # per TC): dcg sweep argmin 0.4 (median RMSE 0.337 / max 0.459 °C, every
+  # TC < 0.5 °C; physical 1.0 -> 0.640 / 0.853 fails); charge spot-check
+  # 0.85 / 1.0 / 1.15 -> 1.0 best. Hysteresis amplitude left at 1.0
+  # (irreversible scaling prioritised; hyst retune was not needed).
+  # History: 1.0 (2026-08-20 NB21 refit — ran with -A DCIR, superseded);
+  # 0.55 (2026-08-06, -A pooled value carried over). Single dataset —
+  # revisit when a second -B module campaign exists. Overridable per run via
+  # the heat_gen_scale_* kwargs on run_lifetime_sim / run_from_timeseries.
+  heat_gen_scale_discharge: 0.4
+  heat_gen_scale_charge: 1.0
+  ocv_hyst_gamma: 1.0e2                    # hysteresis approach rate
+  ocv_hyst_rest_current_threshold_a: 10.0  # |I| below which h is held (rest)
+  soc_ll: -0.05                            # SOC integration clamps
+  soc_ul: 1.05
+  # Over-temp derate bands, PER RAIL (linear power ramp 1 -> 0 across each
+  # band, evaluated on the hot-spot cell temperature). The discharge band's
+  # max also overrides the discharge power-limit sheet's hot gate bound in
+  # the loader (the temporary xlsx still says 62).
+  derate_start_temperature_chg_c: 60.0     # charge: ramp 60 -> 62, zero at 62
+  max_derate_temperature_chg_c: 62.0
+  derate_start_temperature_dcg_c: 63.0     # discharge: ramp 63 -> 65, zero at 65
+  max_derate_temperature_dcg_c: 65.0
+  rc_capacitance_f: 514578.0               # uniform c1/c2 fill (no data file)
+  cycle_fade_slope: 0.0                    # T slope of cycle fade (Veken override)
+  power_fade_slope: 1.25                   # DCIR growth slope: fade = 1 + slope*(1-SOH)
+  coulombic_efficiency: 1.0                # reserved — not yet applied in ECM
+  # Capacity vs temperature, Q(T): interpolated piecewise-linearly between
+  # these points (exact at each, linearly extrapolated outside 15-60 °C). Only
+  # used by run_cell_sim(ocv_capacity_temp_dep=True); every other sim uses
+  # capacity_ah. From the CS2D7485 RPT discharge capacities (3.45 -> 1.5 V; mean
+  # of the cycle-2 CP and cycle-3 CC discharges): 173.32 / 174.04 / 177.73 /
+  # 179.08 Ah at 15 / 25 / 45 / 60 °C (2026-09-30, notebooks/6 - Validation
+  # Studies).
+  #   25 °C: anchored at the nominal capacity_ah (172.4 Ah) so it stays
+  #          consistent with the OCV table's SOC axis.
+  #   15 °C: ratio-scaled to that anchor, 172.4 · 173.32/174.04 = 171.69 Ah
+  #          (the measured 15/25 °C ratio, 0.9959). Using the raw 173.32 would
+  #          put 15 °C above the anchored 25 °C and make the cold extrapolation
+  #          rise with falling temperature. The 15 °C RPT also ran at a lower
+  #          rate (73 W / 25.5 A), so this likely understates the cold loss.
+  #   45 / 60 °C: the measured RPT values.
+  capacity_vs_temperature:
+    temperature_c: [15.0, 25.0, 45.0, 60.0]
+    capacity_ah: [171.69, 172.4, 177.73, 179.08]
+
+model_parameters:
+
+  ocv:
+    file: ocv.csv
+    description: >
+      OCV (charge, discharge, average) vs SOC at 15, 25 and 45 C in 1 % SOC steps: average of the
+      GITT rest samples drifting less than 1 mV/h; gaps filled with HPPC 2 h rest voltages of the
+      same cells (15/45 C) or the 15/45 C curve shape (25 C). SOC = 1 - dQ/Q(T); 100 % = rested
+      after a slow (C/20) charge to 3.45 V; 0 % = rested after a normal-rate discharge to 1.5 V. A
+      normal-rate (~0.24C) charge to 3.45 V ends at SOC 0.996 / 0.994 / 0.992 at 15 / 25 / 45 C on
+      this axis.
+    source:
+      origin: -B Veken 170Ah-HT GITT CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520 (45C) + HPPC 2 h rests of the same cells; reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
+
+  r0:
+    file: r0.csv
+    description: >
+      Ohmic resistance: voltage change at the first complete sample (0.1 s) of the HPPC discharge
+      pulses, median over pulse currents. 15/25/45 C measured (Mean = median of 2 cells, Error = std
+      of 2 cells); -30 to 10 C per-SOC Arrhenius through the measured rows. Fitted with the new OCV
+      (ocv.csv in this folder) subtracted.
+    source:
+      origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
+
+  r1:
+    file: r1.csv
+    description: >
+      1RC resistance of the minutes-scale response, from HPPC SOC moves + 2 h rests with one time
+      constant for all SOC and temperatures (tau1 = 178 s), R0 held. Rows as for r0. Fitted with the
+      new OCV (ocv.csv in this folder) subtracted.
+    source:
+      origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
+
+  c1:
+    file: c1.csv
+    description: >
+      C1 = tau1 / R1 with tau1 = 178 s. Fitted with the new OCV (ocv.csv in this folder) subtracted.
+    source:
+      origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
+
+  entropy:
+    file: entropy.csv
+    description: >
+      Entropy coefficient (dU/dT) parameterized as a function of SOC.
+      Used to compute reversible heat generation in the thermal model.
+    source:
+      origin: -B Veken 170Ah-HT test data (dU/dT approximated from -B RPT OCV vs SOC; see header note).
+      retrieved: "2026-04-15"
+
+  degradation:
+    file: degradation.csv
+    description: >
+      Square-root Arrhenius-Tafel degradation model parameters fit to
+      production cell cycle aging data. Provides best-fit and 95% CI bounds
+      (±1.96 sigma) for Monte Carlo or sensitivity analysis.
+    columns:
+      - name: Confidence Interval
+        unit: dimensionless
+        description: "Row label: Best Fit, Plus 1.96 sigma (pessimistic), or Minus 1.96 sigma (optimistic)"
+      - name: power
+        unit: dimensionless
+        description: Square-root exponent on cycle count in the degradation model
+      - name: k_0
+        unit: dimensionless
+        description: Pre-exponential factor (log scale)
+      - name: coef_arrhenius
+        unit: per_kelvin
+        description: Arrhenius temperature coefficient
+      - name: coef_tafel
+        unit: dimensionless
+        description: Tafel electrochemical rate coefficient
+      - name: degradation_per_cycle
+        unit: fraction_per_cycle
+        description: Calendar / side-reaction degradation rate per cycle
+    source:
+      origin: "20260813_Veken_NFPP_170Ah_DV2_HT-B_MCM-Veken-Data_SqAT_overhang_corr_95CI_montecarlo, https://peakenergyus.sharepoint.com/:p:/g/IQBN48dWa-qHQpsqa8wQ7C-rAZl8XRYre24S096otiD0hXE?e=fA05Z1​"
+      retrieved: "2026-09-15"
+
+  dcg_power_limits:
+    file: dcg_power_limits.csv
+    description: >
+      Temperature-dependent operational discharge power limits for the cell.
+    source:
+      origin: Veken cell datasheet.
+      retrieved: "2026-04-15"
+
+  chg_power_limits:
+    file: chg_power_limits.csv
+    description: >
+      Temperature-and-voltage-dependent operational charge power limits for the cell.
+    source:
+      origin: Sodium plating derisk effort.
+      retrieved: "2026-08-05"
+
+  anode_ocp:
+    file: anode_ocp.csv
+    description: >
+      Half-cell open-circuit potential of the hard carbon negative electrode
+      (U_n) as a function of lithiation fraction x. Sourced from
+      Chayambuka et al. (2022). Used in the calendar aging model.
+    source:
+      origin: "Chayambuka et al. (2022), digitized"
+      retrieved: "2026-04-15"
