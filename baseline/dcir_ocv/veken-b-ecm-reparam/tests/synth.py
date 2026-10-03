@@ -1,4 +1,4 @@
-"""Synthetic Neware-format HPPC record with known OCV and 1RC parameters (verification only)."""
+"""Synthetic Neware-format HPPC record with known OCV and 1RC or 2RC parameters (verification only)."""
 from __future__ import annotations
 
 import datetime as dt
@@ -31,11 +31,12 @@ def schedule(amps=(56.0, 85.0, 170.0), n_points=4, move_I=56.0, move_s=557.0):
 
 
 def write(path, ocv_fn, R0, R1, tau, Q_ah=172.4, z0=1.0, noise_uV=37.0, transition_frac=0.3,
-          seed=0, steps=None):
+          seed=0, steps=None, R2=0.0, tau2=1.0):
     """Simulate the schedule exactly at the logged instants and write a Neware CSV.
 
-    Returns a dict of the true values. The first row of every current step shows full current
-    but only `transition_frac` of the step's instantaneous voltage change (as in the real logs).
+    A second RC branch (R2, tau2) is added when R2 > 0. Returns a dict of the true values. The first
+    row of every current step shows full current but only `transition_frac` of the step's instantaneous
+    voltage change (as in the real logs).
     """
     rng = np.random.default_rng(seed)
     steps = steps or schedule()
@@ -53,7 +54,7 @@ def write(path, ocv_fn, R0, R1, tau, Q_ah=172.4, z0=1.0, noise_uV=37.0, transiti
     dq = np.r_[0.0, i[:-1] * np.diff(t) / 3600.0]
     q = np.cumsum(dq)
     z = z0 - q / Q_ah
-    v = ocv_fn(z) - R0 * i - R1 * ecm.rc_current(t, i, tau)
+    v = ocv_fn(z) - R0 * i - R1 * ecm.rc_current(t, i, tau) - R2 * ecm.rc_current(t, i, tau2)
     first = np.r_[True, step[1:] != step[:-1]]
     cur_first = first & (i != 0)
     v[cur_first] = v[np.flatnonzero(cur_first) - 1] + transition_frac * (v[cur_first] - v[np.flatnonzero(cur_first) - 1])
@@ -77,4 +78,4 @@ def write(path, ocv_fn, R0, R1, tau, Q_ah=172.4, z0=1.0, noise_uV=37.0, transiti
                                f"{-i[r]:.4f}", f"{v_noisy[r]:.6f}", f"{cap[r]:.4f}", f"{chg:.4f}", f"{dch:.4f}",
                                "0.0000", "0.0000", "0.0000", date, f"{-i[r] * v_noisy[r]:.4f}"]))
     Path(path).write_text("﻿" + "\n".join(lines) + "\n", encoding="utf-8")
-    return dict(t=t, i=i, v=v, z=z, R0=R0, R1=R1, tau=tau, Q_ah=Q_ah, z0=z0)
+    return dict(t=t, i=i, v=v, z=z, R0=R0, R1=R1, tau=tau, R2=R2, tau2=tau2, Q_ah=Q_ah, z0=z0)

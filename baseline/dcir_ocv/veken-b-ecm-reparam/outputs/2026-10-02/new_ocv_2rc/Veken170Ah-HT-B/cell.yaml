@@ -8,8 +8,10 @@ format: prismatic
 manufacturer: Veken
 
 # -B DATAPACK STATUS (2026-10-02): nominal values are MEASURED -B data
-# (mass / specific heat / capacity); OCV (unchanged, 2026-08-04) and R0 / R1 / C1
-# (HPPC reparam fitted on that OCV, 2026-10-02) are -B files. 
+# (mass / specific heat / capacity); OCV (GITT reparam, 2026-10-02) and R0 / R1 / C1 / R2 / C2
+# (HPPC 2RC reparam fitted on that OCV, 2026-10-02) are -B files. 
+# r2 / c2 are the second RC branch of a 2RC model; a simulator that reads only r0 / r1 / c1
+# ignores them. 
 # 
 # The entropy data for the -B cell is an approximation of the dU/dT coefficients from our RPTs. We have not run an entropy test on the -B cell b/c the test runs for over 30 days and we have very limited channel capacity (at the best of times) in the lab. 
 # Dan W. ran a correlation study on the OCV vs. SOC from RPTs compared to the true entropy test and they were well correlated, aside from the low SOC region (10%-0% SOC). 
@@ -87,19 +89,23 @@ model_parameters:
   ocv:
     file: ocv.csv
     description: >
-      OCV curves (voltage vs. SOC) for charge and discharge with computed
-      average, at 15°C, 25°C, and 45°C in 1% SOC steps.
+      OCV (charge, discharge, average) vs SOC at 15, 25 and 45 C in 1 % SOC steps: average of the
+      GITT rest samples drifting less than 1 mV/h; gaps filled with HPPC 2 h rest voltages of the
+      same cells (15/45 C) or the 15/45 C curve shape (25 C). SOC = 1 - dQ/Q(T); 100 % = rested
+      after a slow (C/20) charge to 3.45 V; 0 % = rested after a normal-rate discharge to 1.5 V. A
+      normal-rate (~0.24C) charge to 3.45 V ends at SOC 0.996 / 0.994 / 0.992 at 15 / 25 / 45 C on
+      this axis.
     source:
-      origin: -B Veken 170Ah-HT RPT
-      retrieved: "2026-08-04"
+      origin: -B Veken 170Ah-HT GITT CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520 (45C) + HPPC 2 h rests of the same cells; reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
 
   r0:
     file: r0.csv
     description: >
       Ohmic resistance: voltage change at the first complete sample (0.1 s) of the HPPC discharge
       pulses, median over pulse currents. 15/25/45 C measured (Mean = median of 2 cells, Error = std
-      of 2 cells); -30 to 10 C per-SOC Arrhenius through the measured rows. Fitted with the team
-      ocv.csv (unchanged, in this folder) subtracted.
+      of 2 cells); -30 to 10 C per-SOC Arrhenius through the measured rows. Fitted with the new OCV
+      (ocv.csv in this folder) subtracted.
     source:
       origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
       retrieved: "2026-10-02"
@@ -107,11 +113,10 @@ model_parameters:
   r1:
     file: r1.csv
     description: >
-      1RC resistance of the minutes-scale response, from HPPC SOC moves + 2 h rests with one time
-      constant for all SOC and temperatures (tau1 = 210 s), R0 held. Rows as for r0. Fitted with the
-      team ocv.csv (unchanged, in this folder) subtracted. The 45 C move ending at 20 % SOC is left
-      out (the cells' rested voltage at 25 % sits 9-10 mV above this OCV); 20 % is interpolated from
-      the neighbours.
+      2RC model, slow branch: resistance of the minutes-scale response, time constant 1579 s for all
+      SOC and temperatures. Fitted jointly with the fast branch (r2/c2) on the HPPC pulses, their
+      rests and the SOC moves + 2 h rests, R0 held. Rows as for r0. Fitted with the new OCV (ocv.csv
+      in this folder) subtracted.
     source:
       origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
       retrieved: "2026-10-02"
@@ -119,8 +124,25 @@ model_parameters:
   c1:
     file: c1.csv
     description: >
-      C1 = tau1 / R1 with tau1 = 210 s. Fitted with the team ocv.csv (unchanged, in this folder)
-      subtracted.
+      C1 = tau1 / R1 with tau1 = 1579 s (2RC model, see r1).
+    source:
+      origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
+
+  r2:
+    file: r2.csv
+    description: >
+      2RC model, fast branch: resistance of the seconds-scale response, time constant 33.9 s for all
+      SOC and temperatures. Fitted jointly with the slow branch (r1/c1); see r1. Rows as for r0.
+      Fitted with the new OCV (ocv.csv in this folder) subtracted.
+    source:
+      origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
+      retrieved: "2026-10-02"
+
+  c2:
+    file: c2.csv
+    description: >
+      C2 = tau2 / R2 with tau2 = 33.85 s (2RC model, see r2).
     source:
       origin: -B Veken 170Ah-HT HPPC CS2D0052, CS2D9049 (15C), CS2D7013, CS2D9805 (25C), CS2D2520, CS2D8533 (45C); reparameterized in CellApps-Data-Analytics/baseline/dcir_ocv/veken-b-ecm-reparam
       retrieved: "2026-10-02"

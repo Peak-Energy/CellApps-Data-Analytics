@@ -28,3 +28,11 @@ hppc:
   # Team-OCV set only: the 45 C HPPC cells' 2 h rest at 25 % SOC sits 9-10 mV above the team OCV, so the
   # 25 -> 20 % move fits R1 ~ 0 on both cells. Left out (DJ, 2026-10-02); 20 % is interpolated from its neighbours.
   team_ocv_leave_out: [{T: 45, soc: 0.20}]
+
+two_rc:
+  tau_grid_s: [0.5, 5000, 80]          # log-spaced grid searched for the (fast, slow) pair, then refined
+  branch_1: slow                       # r1/c1 hold the slow branch, r2/c2 the fast one (the team's simulator reads r1/c1 only)
+  # Team-OCV 2RC set only: with two branches the OCV mismatch at 45 C / 25 % SOC spoils both moves around it
+  # (R_fast -> 0 for the move ending at 20 %, R_slow -> 0.04 mOhm for the one ending at 25 %). Both left out;
+  # 25 and 20 % are interpolated from 30 and 15 %.
+  team_ocv_leave_out: [{T: 45, soc: 0.20}, {T: 45, soc: 0.25}]

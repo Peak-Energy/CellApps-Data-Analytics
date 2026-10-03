@@ -110,3 +110,25 @@ def test_team_files_round_trip_through_reader_and_writer(tmp_path, name, kind):
     assert list(a.columns) == list(b.columns) and a[keys].equals(b[keys])
     assert np.allclose(a.drop(columns=keys).to_numpy(), b.drop(columns=keys).to_numpy(), rtol=1e-6, atol=1e-9)
     assert (tmp_path / name).read_bytes()[:3] != b"\xef\xbb\xbf"
+
+
+def test_simulation_with_two_branches_is_the_sum_of_two_step_responses():
+    import pandas as pd
+    from reparam import validate
+    R0, R1, tau1, R2, tau2, I = 3e-4, 2e-4, 300.0, 1e-4, 8.0, 100.0
+    t = np.arange(0, 600.0, 0.5)
+    df = pd.DataFrame(dict(t=t, current=np.full_like(t, I)))
+    rc = pd.DataFrame(dict(SOC=[0.0, 1.0], R0=R0, R1=R1, tau1=tau1, R2=R2, tau2=tau2))
+    flat = lambda z: np.full_like(np.asarray(z, float), 3.0)
+    v = validate.simulate(df, np.full_like(t, 0.5), rc, (flat, flat))
+    want = 3.0 - R0 * I - R1 * I * (1 - np.exp(-t / tau1)) - R2 * I * (1 - np.exp(-t / tau2))
+    assert np.max(np.abs(v - want)) < 1e-12
+    one = validate.simulate(df, np.full_like(t, 0.5), rc.drop(columns=["R2", "tau2"]), (flat, flat))
+    assert np.max(np.abs(one - (want + R2 * I * (1 - np.exp(-t / tau2))))) < 1e-12
+
+
+def test_stale_second_row_of_a_step_is_masked_with_the_mid_switch_row():
+    seg = np.array([0, 0, 1, 1, 1, 1, 2, 2, 2])
+    V = np.array([3.0, 3.0, 3.0, 3.0, 2.9, 2.9, 2.9, 2.95, 2.95])
+    bad = ecm.unusable_rows(seg, V)
+    assert bad.tolist() == [False, False, True, True, False, False, True, False, False]

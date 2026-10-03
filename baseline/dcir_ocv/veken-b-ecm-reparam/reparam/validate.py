@@ -1,6 +1,7 @@
 """Whole-file simulation of the RPT (held-out cell) and HPPC records with a parameter set.
 
-One simulator for every parameter set: the 1RC model of ecm.py, row by row over the entire file.
+One simulator for every parameter set: the RC model of ecm.py with as many branches as the set has
+(R1/C1, or R1/C1 + R2/C2), row by row over the entire file.
 - SOC: coulomb counting. SOC = 1 at the end of each rested full charge (a rest that follows a charge
   ending at 3.45 V) and counted forward from there; rows before the first full charge are counted
   back from it. Never inferred from voltage. The jump at each re-anchoring is reported (it is the
@@ -8,7 +9,8 @@ One simulator for every parameter set: the 1RC model of ecm.py, row by row over 
 - OCV: the branch of the most recent current direction (|I| > 1 A), held through rests.
 - Parameters at the file's temperature: table rows used directly; 60 C (outside both sets' data)
   from the 25/45 C OCV rows extended linearly in T and per-SOC Arrhenius through the 15/25/45 C R/C rows.
-- The first logged row of every step (captured mid-switch) is left out of the error statistics.
+- The first logged row of every step (captured mid-switch) and a second row that repeats its voltage
+  (stale logger value) are left out of the error statistics (ecm.unusable_rows).
 """
 from __future__ import annotations
 
@@ -22,13 +24,13 @@ V_MAX = 3.45
 
 
 def rc_at(tab, T):
+    cols = ["R0"] + [c for pair in ecm.branches_of(tab) for c in pair]
     if T in set(tab["T"]):
-        return tab[tab["T"] == T].sort_values("SOC")[["SOC", "R0", "R1", "tau"]].reset_index(drop=True)
+        return tab[tab["T"] == T].sort_values("SOC")[["SOC"] + cols].reset_index(drop=True)
     rows = []
     for s, g in tab[tab["T"].isin(ecm.MEASURED)].sort_values(["SOC", "T"]).groupby("SOC"):
-        a, b = ecm.arrhenius_fit(g["T"].to_numpy(float), g[["R0", "R1", "tau"]].to_numpy())
-        v = ecm.arrhenius_eval(a, b, [T])[0]
-        rows.append(dict(SOC=s, R0=v[0], R1=v[1], tau=v[2]))
+        a, b = ecm.arrhenius_fit(g["T"].to_numpy(float), g[cols].to_numpy())
+        rows.append(dict(SOC=s, **dict(zip(cols, ecm.arrhenius_eval(a, b, [T])[0]))))
     return pd.DataFrame(rows)
 
 
@@ -67,14 +69,17 @@ def simulate(df, z, rc, ocvs):
     """Terminal voltage for every row (row-by-row exact update; current may change within a step)."""
     t, i = df.t.to_numpy(), df.current.to_numpy()
     zc = np.clip(z, 0.0, 1.0)
-    R0, R1, tau = (np.interp(zc, rc.SOC, rc[c]) for c in ["R0", "R1", "tau"])
+    at = lambda c: np.interp(zc, rc.SOC, rc[c])
     s = pd.Series(np.where(i > 1.0, 1.0, np.where(i < -1.0, -1.0, np.nan))).ffill().fillna(1.0).to_numpy()
     U = np.where(s < 0, ocvs[0](z), ocvs[1](z))                      # charging -> charge branch
-    a = np.exp(-np.diff(t) / tau[:-1])
-    x = np.zeros_like(i)
-    for k in range(len(a)):
-        x[k + 1] = a[k] * x[k] + (1 - a[k]) * i[k]
-    return U - R0 * i - R1 * x
+    v = U - at("R0") * i
+    for Rc, tc in ecm.branches_of(rc):
+        a = np.exp(-np.diff(t) / at(tc)[:-1])
+        x = np.zeros_like(i)
+        for k in range(len(a)):
+            x[k + 1] = a[k] * x[k] + (1 - a[k]) * i[k]
+        v = v - at(Rc) * x
+    return v
 
 
 def phases(df, steps, test):
@@ -118,7 +123,7 @@ def metrics(e):
 def run_file(test, T, path, sets, Q, soc_starts):
     """Simulate one file with every parameter set. Returns (metrics rows, trace dict, anchor jumps)."""
     df, steps = load.load_cached(path)
-    first = np.r_[False, df.seg.to_numpy()[1:] != df.seg.to_numpy()[:-1]]
+    first = ecm.unusable_rows(df.seg.to_numpy(), df.voltage.to_numpy())
     ph = phases(df, steps, test)
     st = pd.Series(df.seg.map(step_type(steps))).to_numpy()
     rows, trace, jumps = [], dict(t_h=df.t.to_numpy() / 3600, V=df.voltage.to_numpy(), I=df.current.to_numpy(),

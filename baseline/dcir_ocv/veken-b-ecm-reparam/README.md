@@ -1,31 +1,46 @@
-# Veken 170Ah-HT -B: OCV and 1RC parameters from GITT and HPPC
+# Veken 170Ah-HT -B: OCV, 1RC and 2RC parameters from GITT and HPPC
 
-This folder rebuilds the -B cell's OCV and 1RC tables from the raw lab files and compares them with the current team
+This folder rebuilds the -B cell's OCV and RC tables from the raw lab files and compares them with the current team
 datapack (`cell-performance/cells/Veken170Ah-HT-B`). Built 2026-10-01/02 by DJ with Claude. Every decision below
 was made with DJ unless it says *my choice*.
 
-Which OCV to use is the team's call, so there are **two complete parameter sets**. Each is a copy of the team's
-cell folder with the new files in place, ready to drop into `cell-performance/cells/`:
+Which OCV to use is the team's call, and the 1RC and 2RC are both on the table, so there are **four complete
+parameter sets**. Each is a copy of the team's cell folder with the new files in place, ready to drop into
+`cell-performance/cells/`:
 
-| Folder (`outputs/2026-10-02/…`) | OCV | R0 / R1 / C1 | Files that differ from the team folder |
+| Folder (`outputs/2026-10-02/…`) | OCV | Model | Files that differ from the team folder |
 |---|---|---|---|
-| `new_ocv/Veken170Ah-HT-B/` | **new OCV** built here from the GITT (below) | fitted with the new OCV subtracted, τ1 = 178 s | `ocv.csv`, `r0.csv`, `r1.csv`, `c1.csv`, `cell.yaml` |
-| `team_ocv/Veken170Ah-HT-B/` | **team `ocv.csv`**, unchanged | fitted with the team OCV subtracted, τ1 = 209 s | `r0.csv`, `r1.csv`, `c1.csv`, `cell.yaml` |
+| `new_ocv/Veken170Ah-HT-B/` | **new OCV** built here from the GITT (below) | 1RC, τ1 = 178 s | `ocv.csv`, `r0.csv`, `r1.csv`, `c1.csv`, `cell.yaml` |
+| `team_ocv/Veken170Ah-HT-B/` | **team `ocv.csv`**, unchanged | 1RC, τ1 = 210 s | `r0.csv`, `r1.csv`, `c1.csv`, `cell.yaml` |
+| `new_ocv_2rc/Veken170Ah-HT-B/` | new OCV | 2RC: slow branch τ1 = 1579 s in `r1`/`c1`, fast branch τ2 = 34 s in `r2`/`c2` | `ocv.csv`, `r0.csv`, `r1.csv`, `c1.csv`, `r2.csv`, `c2.csv`, `cell.yaml` |
+| `team_ocv_2rc/Veken170Ah-HT-B/` | team `ocv.csv`, unchanged | 2RC: slow branch τ1 = 1664 s in `r1`/`c1`, fast branch τ2 = 39 s in `r2`/`c2` | `r0.csv`, `r1.csv`, `c1.csv`, `r2.csv`, `c2.csv`, `cell.yaml` |
 
-- **Other files.** All other files are byte-for-byte copies of the team folder, including `entropy.csv` in both sets.
+- **Other files.** All other files are byte-for-byte copies of the team folder, including `entropy.csv` in every set.
 - **`cell.yaml`.** It is the team file with only two kinds of change: the status comment, and the `model_parameters`
-  entries for the files that changed (description, origin, retrieved date).
-- **R1 and C1 depend on the OCV.** The fit subtracts the OCV from the measured voltage, so each set's R1 and C1
-  belong with its own `ocv.csv` and shouldn't be mixed across sets. R0 doesn't depend on the OCV and is the same in
-  both sets.
+  entries for the files that changed (description, origin, retrieved date). The 2RC sets add `r2` and `c2` entries
+  shaped like `r1` and `c1`.
+- **`r2.csv` / `c2.csv`** have the same grid, columns and units as `r1.csv` / `c1.csv`. The team's simulator reads
+  only `r0`/`r1`/`c1` today; it would have to be extended to use the second branch. In the 2RC sets `r1`/`c1` is the
+  slow branch, so a simulator that ignores `r2`/`c2` still gets the minutes-scale response (which branch is "1" is a
+  naming choice, open to the team).
+- **R1, C1, R2, C2 depend on the OCV.** The fit subtracts the OCV from the measured voltage, so each set's RC tables
+  belong with its own `ocv.csv` and shouldn't be mixed across sets. R0 doesn't depend on the OCV or the model and is
+  the same in all four sets.
 
 **Results on the held-out RPT cell (whole files, RMSE at 15 / 25 / 45 / 60 °C):**
 
 | Set | RMSE (mV) |
 |---|---|
 | team datapack | 27 / 25 / 23 / 21 |
-| new-OCV set | 24 / 25 / 29 / 30 |
-| team-OCV set | 21 / 24 / 23 / 22 |
+| new-OCV set (1RC) | 24 / 25 / 28 / 30 |
+| team-OCV set (1RC) | 21 / 23 / 23 / 21 |
+| new-OCV 2RC set | 23 / 25 / 32 / 49 |
+| team-OCV 2RC set | 29 / 36 / 28 / 44 |
+
+**The 2RC does not beat the 1RC on the held-out cell.** It is marginally better on the 10–150 s pulses and worse
+on the hour-long charges and discharges, where its slow branch (about 1600 s, fitted on the 2 h rests) keeps
+building polarization that the cell doesn't show. Adding a fast branch to the 1RC's own time constant changes the
+whole-file numbers by at most 0.3 mV. Details under "2RC".
 
 ---
 
@@ -38,14 +53,16 @@ config.yaml      the values decided with DJ (threshold, capacities, temperature 
 reparam/
   load.py        raw-file locations, Neware CSV loader, datapack file reader/writer
   ocv.py         OCV and dU/dT from GITT (+ HPPC rests)
-  ecm.py         1RC model, HPPC fits, gridding, cold-temperature fill
+  ecm.py         RC models, HPPC windows, 1RC and 2RC fits, gridding, cold-temperature fill
   validate.py    whole-file simulation of RPT and HPPC records
   figures.py     the plots
-tests/           python3 -m pytest tests   (unit tests + a synthetic HPPC file with known answers)
+tests/           python3 -m pytest tests   (unit tests + synthetic 1RC and 2RC HPPC files with known answers)
 outputs/2026-10-02/
-  new_ocv/Veken170Ah-HT-B/     drop-in cell folder, new OCV
-  team_ocv/Veken170Ah-HT-B/    drop-in cell folder, team OCV
-  provenance.json              every rest point, every fit window, every validation number, for both sets
+  new_ocv/Veken170Ah-HT-B/         drop-in cell folder, new OCV, 1RC
+  team_ocv/Veken170Ah-HT-B/        drop-in cell folder, team OCV, 1RC
+  new_ocv_2rc/Veken170Ah-HT-B/     drop-in cell folder, new OCV, 2RC
+  team_ocv_2rc/Veken170Ah-HT-B/    drop-in cell folder, team OCV, 2RC
+  provenance.json                  every rest point, every fit window, every validation number, for all sets
   figures/                     listed under "Figures"
 ```
 
@@ -73,54 +90,66 @@ Raw data (read-only): `~/Documents/Projects/Battery Modeling Data/Veken/Veken-B-
 ### Held-out cell (CS2D7485, RPT files), entire file simulated
 
 Every row of each RPT file is simulated: capacity cycles, the pulse-and-move block and the final cycles.
-Error = model − measured voltage. 60 °C is outside the fitted range of all three sets.
+Error = model − measured voltage. 60 °C is outside the fitted range of every set.
 
 | Parameter set | RMSE (mV), 15 / 25 / 45 / 60 °C | 99th percentile \|error\| (mV) | Share within 50 mV |
 |---|---|---|---|
-| Team datapack | 27.0 / 25.2 / 22.7 / 21.4 | 148 / 122 / 122 / 93 | 0.96 / 0.97 / 0.95 / 0.97 |
-| New-OCV set | 24.2 / 24.9 / 28.5 / 30.5 | 129 / 91 / 123 / 101 | 0.97 / 0.93 / 0.93 / 0.87 |
-| New-OCV set, starting at the SOC a normal-rate charge reaches (see "SOC = 100 %") | 21.5 / 19.5 / 30.8 / 44.0 | 107 / 82 / 105 / 154 | 0.97 / 0.97 / 0.86 / 0.83 |
-| Team-OCV set | 20.5 / 23.6 / 23.0 / 21.6 | 96 / 80 / 95 / 88 | 0.98 / 0.95 / 0.94 / 0.97 |
+| Team datapack | 26.9 / 25.1 / 22.6 / 21.2 | 148 / 121 / 122 / 92 | 0.97 / 0.97 / 0.95 / 0.97 |
+| New-OCV set (1RC) | 24.4 / 24.7 / 28.2 / 30.3 | 132 / 90 / 123 / 101 | 0.97 / 0.93 / 0.93 / 0.87 |
+| New-OCV set, starting at the SOC a normal-rate charge reaches (see "SOC = 100 %") | 21.6 / 19.4 / 30.5 / 43.7 | 110 / 82 / 102 / 154 | 0.97 / 0.97 / 0.87 / 0.83 |
+| Team-OCV set (1RC) | 20.5 / 23.4 / 22.8 / 21.4 | 98 / 79 / 94 / 87 | 0.98 / 0.95 / 0.94 / 0.97 |
+| New-OCV 2RC set | 23.4 / 24.7 / 32.1 / 48.6 | 77 / 90 / 115 / 214 | 0.95 / 0.93 / 0.90 / 0.86 |
+| Team-OCV 2RC set | 28.7 / 36.3 / 27.9 / 44.1 | 145 / 170 / 114 / 235 | 0.96 / 0.94 / 0.92 / 0.89 |
 
-Mean RMSE over 15–45 °C: team datapack 25.0 mV, new-OCV set 25.9 mV, team-OCV set 22.4 mV.
+Mean RMSE over 15–45 °C: team datapack 24.9 mV, new-OCV set 25.8 mV, team-OCV set 22.2 mV, new-OCV 2RC set
+26.7 mV, team-OCV 2RC set 31.0 mV.
 
 Where the errors are (RMSE mV, 15 / 25 / 45 / 60 °C):
 
-| Part of the test | Team datapack | New-OCV set | Team-OCV set |
-|---|---|---|---|
-| 10–60 s pulses | 50 / 53 / 22 / 28 | 19 / 28 / 33 / 33 | 42 / 47 / 24 / 28 |
-| 150 s pulses | 58 / 51 / 35 / 52 | 34 / 35 / 44 / 66 | 64 / 52 / 35 / 52 |
-| Constant-power discharges | 67 / 59 / 60 / 36 | 51 / 38 / 26 / 47 | 35 / 23 / 40 / 31 |
-| Constant-power charges | 93 / 80 / 35 / 52 | 32 / 39 / 58 / 45 | 73 / 72 / 45 / 50 |
-| SOC 10–90 % | 8 / 5 / 8 / 12 | 11 / 12 / 16 / 23 | 8 / 10 / 12 / 13 |
-| SOC below 10 % | 73 / 67 / 62 / 54 | 63 / 57 / 71 / 64 | 54 / 59 / 58 / 52 |
-| SOC above 90 % | 12 / 9 / 6 / 8 | 8 / 27 / 8 / 15 | 9 / 10 / 10 / 9 |
-| Rests | 65 / 45 / 31 / 59 | 63 / 54 / 45 / 42 | 66 / 43 / 29 / 61 |
+| Part of the test | Team datapack | New-OCV set | Team-OCV set | New-OCV 2RC set | Team-OCV 2RC set |
+|---|---|---|---|---|---|
+| 10–60 s pulses | 50 / 53 / 22 / 28 | 19 / 28 / 32 / 33 | 42 / 47 / 24 / 28 | 21 / 27 / 33 / 34 | 41 / 45 / 24 / 28 |
+| 150 s pulses | 60 / 52 / 35 / 55 | 33 / 34 / 44 / 69 | 66 / 54 / 35 / 56 | 29 / 30 / 44 / 69 | 64 / 53 / 34 / 54 |
+| Constant-current discharges (hours) | 23 / 16 / 24 / 19 | 27 / 20 / 20 / 35 | 16 / 9 / 20 / 20 | 24 / 19 / 36 / 63 | 24 / 32 / 29 / 48 |
+| Constant-current charges (hours) | 16 / 15 / 14 / 15 | 16 / 25 / 32 / 21 | 13 / 23 / 22 / 15 | 19 / 25 / 22 / 21 | 23 / 28 / 22 / 34 |
+| Constant-power discharges (minutes) | 68 / 59 / 61 / 36 | 53 / 38 / 25 / 47 | 36 / 23 / 40 / 31 | 47 / 44 / 58 / 86 | 41 / 52 / 46 / 56 |
+| Constant-power charges (minutes) | 92 / 79 / 35 / 50 | 31 / 39 / 57 / 44 | 73 / 71 / 44 / 49 | 45 / 43 / 46 / 44 | 92 / 91 / 51 / 67 |
+| SOC 10–90 % | 8 / 5 / 8 / 12 | 10 / 12 / 15 / 23 | 8 / 10 / 12 / 13 | 17 / 15 / 21 / 29 | 15 / 16 / 16 / 18 |
+| SOC below 10 % | 73 / 67 / 62 / 53 | 64 / 57 / 71 / 64 | 54 / 59 / 58 / 52 | 50 / 51 / 75 / 120 | 72 / 92 / 69 / 121 |
+| SOC above 90 % | 12 / 9 / 6 / 8 | 8 / 27 / 8 / 15 | 9 / 10 / 9 / 9 | 9 / 27 / 9 / 13 | 9 / 11 / 5 / 6 |
+| Rests | 65 / 44 / 29 / 58 | 63 / 53 / 44 / 42 | 65 / 43 / 28 / 60 | 41 / 44 / 52 / 71 | 87 / 84 / 58 / 100 |
 
 What this says:
 - **Team-OCV set.** Its OCV is identical to the team datapack's, so every difference from the datapack comes from
-  the new R0/R1/C1. It is lower than the datapack at 15 and 25 °C (27 → 21, 25 → 24 mV) and within 0.3 mV at
+  the new R0/R1/C1. It is lower than the datapack at 15 and 25 °C (27 → 21, 25 → 23 mV) and within 0.3 mV at
   45/60 °C. The biggest gain is on the constant-power discharges, the minutes-long load.
-- **New-OCV set.** It has the lowest error of the three on the pulses and constant-power charges at 15/25 °C. Its
-  error is higher between 10 and 90 % SOC, above 90 % SOC at 25 °C, and over whole files at 45/60 °C. See "How the
-  two OCVs differ".
+- **New-OCV set.** It has the lowest 1RC error on the pulses and constant-power charges at 15/25 °C. Its error is
+  higher between 10 and 90 % SOC, above 90 % SOC at 25 °C, and over whole files at 45/60 °C. See "How the two OCVs
+  differ".
+- **2RC sets.** Against the 1RC set on the same OCV, the 2RC is 1–4 mV better on the 10–150 s pulses and on the
+  constant-power charges with the new OCV, and 4–30 mV worse on the hour-long constant-current charges and
+  discharges, below 10 % SOC and at 60 °C. The whole-file figures show where: the slow branch (τ ≈ 1600 s) keeps
+  building polarization through the hour-long steps and overshoots at the cut-off voltages. Both 2RC sets drop the
+  share of rows within 50 mV.
 - **Coulomb counting drifts slowly.** Every time the cell is fully charged again, the counted SOC reads
   1.001–1.004 instead of 1. Between full charges the cell takes in 0.1–0.4 % of capacity more than it gives out
   (side reactions / self-discharge). provenance.json lists each re-anchoring.
 
 ### HPPC files, entire file
 
-These files are in-sample for both new sets. Their R1 and C1 are fitted on them, and the new OCV also uses their
-2 h rests at 15/45 °C. RMSE in mV:
+These files are in-sample for all four new sets. Their RC tables are fitted on them, and the new OCV also uses
+their 2 h rests at 15/45 °C. RMSE in mV:
 
-| File | Team datapack | New-OCV set | Team-OCV set |
-|---|---|---|---|
-| 15 °C CS2D0052 / CS2D9049 | 18.5 / 14.5 | 20.9 / 16.1 | 18.3 / 14.2 |
-| 25 °C CS2D7013 / CS2D9805 | 19.1 / 19.9 | 26.5 / 27.7 | 18.2 / 19.0 |
-| 45 °C CS2D2520 / CS2D8533 | 39.9 / 46.0 | 45.5 / 50.7 | 39.9 / 46.0 |
+| File | Team datapack | New-OCV set | Team-OCV set | New-OCV 2RC set | Team-OCV 2RC set |
+|---|---|---|---|---|---|
+| 15 °C CS2D0052 / CS2D9049 | 18.5 / 14.5 | 20.9 / 16.1 | 18.3 / 14.2 | 20.8 / 16.1 | 18.2 / 14.3 |
+| 25 °C CS2D7013 / CS2D9805 | 19.0 / 19.9 | 26.5 / 27.7 | 18.2 / 19.0 | 26.7 / 27.8 | 18.8 / 19.5 |
+| 45 °C CS2D2520 / CS2D8533 | 39.9 / 46.0 | 45.5 / 50.7 | 39.9 / 46.0 | 45.5 / 50.7 | 39.9 / 45.9 |
 
-- **45 °C.** All three sets drift upward late in the test, at low SOC (`hppc_whole_files.png`). The same drift in
-  every set points to SOC or OCV at 45 °C rather than to any 1RC.
+- **1RC and 2RC are within 0.6 mV of each other on every HPPC file.** The HPPC-file error is dominated by SOC and
+  OCV, not by the RC branches that were fitted on these very files.
+- **45 °C.** All sets drift upward late in the test, at low SOC (`hppc_whole_files.png`). The same drift in
+  every set points to SOC or OCV at 45 °C rather than to any RC model.
 - **25 °C.** The 100 h rest at full charge is the other large error for all sets: the model holds the OCV while the
   cell keeps relaxing.
 
@@ -169,10 +198,10 @@ at 15 / 25 / 45 / 60 °C; "mean" is over 15–45 °C.
 
 | Variant | RMSE | Mean | In the new-OCV set? |
 |---|---|---|---|
-| 25 °C gaps filled with HPPC rests, branches averaged at SOC 0 | 28 / 39 / 27 / 35 | 31.6 | no |
-| … with the 25 °C curve below 20 % SOC from the 15/45 °C shape | 28 / 26 / 27 / 31 | 27.3 | — |
-| … with SOC 0 = rested voltage after a normal-rate discharge to 1.5 V | 25 / 33 / 29 / 32 | 28.5 | — |
-| both of the above | 24 / 25 / 29 / 30 | 25.9 | **yes** |
+| 25 °C gaps filled with HPPC rests, branches averaged at SOC 0 | 28 / 39 / 27 / 35 | 31.5 | no |
+| … with the 25 °C curve below 20 % SOC from the 15/45 °C shape | 28 / 26 / 27 / 31 | 27.2 | — |
+| … with SOC 0 = rested voltage after a normal-rate discharge to 1.5 V | 24 / 32 / 28 / 33 | 28.3 | — |
+| both of the above | 24 / 25 / 28 / 30 | 25.8 | **yes** |
 | both, plus 100 % = rested after a normal-rate charge (as the team) | 26 / 20 / 30 / 47 | 25.6 | **no (DJ)**: 100 % stays at the slow charge, the closest state to equilibrium; a normal-rate 100 % would put a slowly charged cell above 100 % |
 | a narrower charge/discharge gap | — | — | not tested (DJ): the measured GITT gap is kept |
 
@@ -180,29 +209,32 @@ at 15 / 25 / 45 / 60 °C; "mean" is over 15–45 °C.
 
 | File | Shows |
 |---|---|
-| `rpt_summary.png` | whole-file RMSE and 99th-percentile error on the RPT cell, all three sets, by temperature |
-| `rpt_15C_whole_file.png` … `rpt_60C_whole_file.png` | measured vs all three sets over the whole RPT file, error with ±50 mV band, current |
-| `hppc_whole_files.png` | model − measured over each whole HPPC file, all three sets |
+| `rpt_summary.png` | whole-file RMSE and 99th-percentile error on the RPT cell, all five sets, by temperature |
+| `rpt_15C_whole_file.png` … `rpt_60C_whole_file.png` | measured vs all five sets over the whole RPT file, error with ±50 mV band, current |
+| `hppc_whole_files.png` | model − measured over each whole HPPC file, all five sets |
 | `ocv_new_vs_team.png` | charge, discharge, average OCV at 15/25/45 °C, new vs team, with the difference |
 | `entropy_candidate_vs_team.png` | the team's dU/dT and the candidate from the new OCV (in neither set) |
-| `r0_all_sets.png`, `r1_all_sets.png`, `c1_all_sets.png` | each table at all 8 temperatures for all three sets; grey panels are extrapolated rows |
+| `r0_all_sets.png`, `r1_all_sets.png`, `c1_all_sets.png` | each table at all 8 temperatures for all five sets; grey panels are extrapolated rows |
+| `r2_all_sets.png`, `c2_all_sets.png` | the fast branch of the two 2RC sets |
 
 ---
 
 ## How the R0 / R1 / C1 tables differ from the team datapack, and why
 
-Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set).
+Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set, both 1RC). The 2RC sets have the same R0; their
+`r1` (slow branch, τ1 = 1579 / 1664 s) is 31–36 % below the team R1 at 15/25 °C and 7–13 % below at 45 °C, and their
+`r2` (fast branch, τ2 = 34 / 39 s) has no team counterpart.
 
 | Quantity | Team datapack | Both new sets | Difference | Main cause |
 |---|---|---|---|---|
-| R0 | voltage change on the first logged row of each pulse. That row is captured mid-switch and shows about 30 % of the real drop | voltage change at the first complete sample, 0.1 s into the pulse (same in both sets) | 0.34 vs 0.080 mΩ at 25 °C; 0.57 vs 0.067 at 15 °C; 0.19 vs 0.074 at 45 °C; about 8× in the cold rows | method; same 25 °C raw data |
-| τ1 | fixed near 362 s at every SOC and temperature | one τ1 fitted to all SOC moves at all temperatures: 178 s (new-OCV set), 209 s (team-OCV set) | — | method; τ1 depends on the OCV subtracted in the fit |
-| R1 | 10 s pulse resistance − R0 | fitted per SOC and temperature with R0 and τ1 held | 25 °C −23 / −19 %; 15 °C −16 / −11 %; 45 °C +1 / +5 %; −30 °C −33 / −38 % | method: the team R1 is the 10 s response, the new R1 the minutes-long one |
-| C1 | from the team τ1 and R1 | τ1 / R1 | 25 °C −36 / −29 %; 15 °C −42 / −35 %; 45 °C −52 / −46 % | follows τ1 and R1 |
+| R0 | voltage change on the first logged row of each pulse. That row is captured mid-switch and shows about 30 % of the real drop | voltage change at the first complete sample, 0.1 s into the pulse (same in all sets) | 0.34 vs 0.080 mΩ at 25 °C; 0.57 vs 0.067 at 15 °C; 0.19 vs 0.074 at 45 °C; about 8× in the cold rows | method; same 25 °C raw data |
+| τ1 | fixed near 362 s at every SOC and temperature | one τ1 fitted to all SOC moves at all temperatures: 178 s (new-OCV set), 210 s (team-OCV set) | — | method; τ1 depends on the OCV subtracted in the fit |
+| R1 | 10 s pulse resistance − R0 | fitted per SOC and temperature with R0 and τ1 held | 25 °C −26 / −24 %; 15 °C −15 / −13 %; 45 °C −10 / −3 %; −30 °C −27 / −38 % | method: the team R1 is the 10 s response, the new R1 the minutes-long one |
+| C1 | from the team τ1 and R1 | τ1 / R1 | 25 °C −34 / −24 %; 15 °C −42 / −34 %; 45 °C −46 / −41 % | follows τ1 and R1 |
 | 25 °C row | not measured: it equals the Arrhenius interpolation of the team's 15 and 45 °C rows | measured | see above | convention |
 | Lowest SOC rows | team rows 0 / 0.025 / 0.05 / 0.075 hold the HPPC points measured at 2.5 / 5 / 7.5 / 10 % | true SOC; SOC 0 extrapolated | low-SOC values shifted by one HPPC step | convention |
 | Cold rows (−30 to 10 °C) | R0 follows the -A cell's temperature trend | Arrhenius through the measured 15/25/45 °C rows, separately at each SOC | R0 ≈8× higher, R1 lower (above) | method |
-| Entropy | approximated from RPT OCV | not changed: both sets keep the team's `entropy.csv` | — | the candidate from the new OCV is in provenance.json only (see "Entropy") |
+| Entropy | approximated from RPT OCV | not changed: all sets keep the team's `entropy.csv` | — | the candidate from the new OCV is in provenance.json only (see "Entropy") |
 
 ---
 
@@ -212,6 +244,11 @@ Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set).
 - **Time inside a second.** The files print time to the whole second but log pulses every 0.1 s, so ten rows
   share each printed second. They're spaced evenly inside it (DJ). Using the charge counter instead would add up to
   ±21 ms of rounding at 8.5 A.
+- **Rows the logger didn't capture.** The first row of every step is logged mid-switch (it shows the full current
+  but only about 30 % of the voltage step). When the second row falls within about 0.5 s and the step is logged
+  coarser than 0.1 s, that row repeats the first row's voltage exactly: it happens on every SOC move and every rest
+  after one, in the HPPC and the RPT files alike, and never on the 0.1 s pulse logging. Both rows are left out of
+  every fit and every validation statistic (*my choice*).
 - **Test pauses.** Three files stopped logging for a while: 28 h in both 15 °C GITT files, 23 h in the 45 °C GITT,
   5 min in both 45 °C HPPC files. The missing time is added back from the wall clock so relaxation is timed
   correctly (*my choice*).
@@ -276,17 +313,16 @@ Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set).
   −0.3 mV/K.
 - **The team's own files disagree.** The team's `ocv.csv` implies the same steep slopes as this candidate, which
   doesn't match the team's `entropy.csv`.
-- **Where to find it.** In provenance.json and `entropy_candidate_vs_team.png`. Both sets ship the team's
+- **Where to find it.** In provenance.json and `entropy_candidate_vs_team.png`. All sets ship the team's
   `entropy.csv`.
 
-### 1RC (both sets, same procedure)
+### 1RC (both 1RC sets, same procedure)
 - **R0.** Voltage change divided by current at the first complete sample (0.1 s) of the discharge pulses, median
-  over the pulse currents (DJ).
-  - The first logged row of every step is captured mid-switch and is never used.
+  over the pulse currents (DJ). The same R0 is used by the 2RC sets.
   - R0 doesn't depend on pulse current (0.340–0.341 mΩ from 56 to 170 A at 25 °C).
-- **Which response the RC branch represents.** The cell has a fast (≈10 s) and a slow (minutes) response; a 1RC
-  holds one.
-  - The slow one was chosen, with one time constant for every SOC and temperature (DJ).
+- **Which response the RC branch represents.** The cell shows responses on three time scales, about 5–10 s, about
+  50 s and about 1600 s (see "2RC"); a 1RC holds one compromise.
+  - The minutes-scale one was chosen, with one time constant for every SOC and temperature (DJ).
   - τ1 comes from all SOC-move windows fitted together; R1 is fitted per SOC and temperature with R0 held.
   - Alternatives tested on the held-out cell (new-OCV set):
     - 10 s pulses only (τ ≈ 6–15 s) under-predicted sustained load;
@@ -302,53 +338,99 @@ Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set).
   - samples are weighted by their time spacing;
   - current is held at each step's mean.
 - **Windows left out:**
-  - **Both sets** (*my choice*, reported at checkpoint 3):
+  - **All sets** (*my choice*):
     - pulses at the 100 % point and the first SOC move. They start fresh off the charge, mid-way from the charge
       to the discharge OCV branch.
     - pulses at the last (2.5 %) point. That point runs charge-first and gave R1 of 7–38 mΩ at 45 °C.
   - **Team-OCV set only, the 45 °C move from 25 to 20 % SOC on both cells (DJ).**
     - At 25 % the cells' 2 h rested voltage sits 9–10 mV above the team OCV. Every other rest from 12 to 40 % is
       within about 4 mV, except the lowest one at 12–13 % (7–8.5 mV).
-    - The fit absorbed that mismatch by setting R1 to 0.03 mΩ, against 0.35–0.39 mΩ for the neighbouring moves.
-      Through the cold-row extrapolation, that made R1 = 1505 mΩ at −30 °C and 20 % SOC.
-    - With the move left out, the 45 °C value at 20 % is interpolated from its neighbours (0.36 mΩ) and the −30 °C
-      value is 3.0 mΩ.
-    - Leaving it out raises the RPT RMSE at 45 / 60 °C by 0.4 / 0.3 mV and leaves 15 / 25 °C and the HPPC files
-      unchanged.
+    - The fit absorbs that mismatch by driving R1 to 0 (the non-negative fit's boundary), against 0.34–0.41 mΩ for
+      the neighbouring moves.
+    - With the move left out, the 45 °C value at 20 % is interpolated from its neighbours (0.37 mΩ) and the −30 °C
+      value is 2.9 mΩ. The zero rule under "Tables" gives the same table, so the leave-out changes no number.
   - **Windows used.** The new-OCV set uses 138 SOC-move windows and the team-OCV set 136. Both use 414 pulse
     windows.
-- **Residual shape.** The single slow branch leaves about +5 mV in the first 10 s after a move ends and −0.7 to
-  −0.8 mV during it, in both sets. That's the fast branch a 1RC can't carry.
+- **Residual shape.** Per move window the single branch leaves 2.3 / 2.2 mV RMSE and +1.0 / +0.8 mV mean residual
+  during the move (new-OCV / team-OCV set). The rests after the moves are logged every 300 s, so nothing faster
+  than that is visible in them.
+
+### 2RC (both 2RC sets, same procedure)
+- **Model.** R0 as in the 1RC, plus a fast and a slow RC branch, each with one time constant for every SOC and
+  temperature; R_fast and R_slow vary with SOC and temperature (DJ).
+- **Joint fit (DJ).** Every HPPC window takes part at once: the discharge pulses (10 s + 60 s rest, 0.1 s
+  logging), the charge pulses (10 s + 900 s rest, 0.1 s logging) and the SOC moves (5–10 min + 2 h rest, logged
+  every 30–300 s). The two time constants are chosen on a log grid of 80 values from 0.5 to 5000 s, by the summed
+  weighted error over all windows after the best non-negative (R_fast, R_slow) pair has been solved at each SOC
+  point, then refined between grid points. The 1RC's fit details (free zero level per window, RC history from the
+  last long rest, time-spacing weights, step-mean current, excluded windows, SOC shift) are kept unchanged.
+- **Per SOC point.** R_fast and R_slow are solved together from the point's pulses and move, with R0 held. R_fast
+  is kept from points that have usable pulses and R_slow from points that have a usable move; a point missing one
+  kind (the first and the last point) holds the branch it cannot see at the nearest complete point's value.
+- **What came out.**
+  - New-OCV set: τ_fast = 34 s, τ_slow = 1579 s. Team-OCV set: τ_fast = 39 s, τ_slow = 1664 s. Neither sits at
+    a grid edge, and the error surface has a single minimum.
+  - The windows disagree about the time constants. The pulse windows alone prefer about 5 s + 47 s; the move
+    windows alone prefer 37–47 s + 1560–1750 s. The joint fit lands between them because the moves carry more
+    time weight. A 2RC holds two of the cell's three time scales.
+  - On the fit windows, the pair leaves 0.42 / 0.40 mV RMS against 0.96 / 0.91 mV for the best single time
+    constant (135 / 151 s). Per window: pulses 0.6–0.7 mV RMSE, moves 1.4 mV.
+  - R_fast is small and noisy at 45 °C (0.03–0.2 mΩ, alternating between neighbouring points), and two points at
+    45 °C / 10 % SOC (new OCV) and one at 95 % (team OCV, alternative only) fitted to exactly 0 and are
+    interpolated. Its activation energies span −0.02 to 0.8 eV, so the cold rows of `r2` are not to be trusted;
+    the slow branch's activation energies also go negative at some SOC (−0.3 to 0.4 eV).
+- **Team-OCV 2RC set only, two 45 °C moves left out (ending at 25 % and at 20 % SOC).** With two branches the
+  OCV mismatch at 25 % spoils both moves around it: the move ending at 20 % drives R_fast to 0, the one ending at
+  25 % drives R_slow to 0.04 mΩ against 0.1–0.4 mΩ at the neighbours (and through the cold rows to 63 mΩ at
+  −30 °C). Both points are interpolated from 30 and 15 %. The team-OCV 2RC set therefore uses 134 move windows;
+  both 2RC sets use 828 pulse windows (discharge and charge).
+- **Tested alternatives** (validation only, no folder; whole-file RPT RMSE at 15 / 25 / 45 / 60 °C):
+
+  | Variant | New OCV | Team OCV |
+  |---|---|---|
+  | joint fit (the 2RC sets) | 23.4 / 24.7 / 32.1 / 48.6 | 28.7 / 36.3 / 27.9 / 44.1 |
+  | τ_fast = 8 s (what the pulses prefer at the joint τ_slow), joint τ_slow | 24.6 / 27.5 / 32.3 / 48.4 | 29.8 / 38.9 / 27.8 / 43.5 |
+  | τ_fast = 8 s added on top of the 1RC's τ1 (178 / 210 s) | 24.8 / 24.4 / 28.5 / 30.5 | 20.6 / 23.2 / 22.9 / 21.4 |
+  | the 1RC set itself | 24.4 / 24.7 / 28.2 / 30.3 | 20.5 / 23.4 / 22.8 / 21.4 |
+
+  Adding a fast branch to the 1RC changes the whole-file error by at most 0.3 mV: the 10 s response is a small
+  part of the whole-file error, and the gain the 2RC sets show on the pulses is paid for several times over on the
+  hour-long steps by the 1600 s branch.
+- **Naming.** `r1`/`c1` hold the slow branch and `r2`/`c2` the fast one (`config.yaml`, `two_rc.branch_1`), so a
+  simulator that reads only `r1`/`c1` still gets the minutes-scale response. Open to the team.
 
 ### Tables
 - **Grid.** The team's 24 SOC points and 8 temperatures. The SOC 0 and 1 rows are extrapolated in a straight line
   from the two nearest measured points (DJ).
 - **Mean / Error.** Mean = median of the two cells, Error = standard deviation of the two cells (spec; sample
-  standard deviation is *my choice*). C1 = τ1 / R1 after combining the cells.
+  standard deviation is *my choice*). C1 = τ1 / R1 (and C2 = τ2 / R2) after combining the cells.
+- **A resistance that fitted to exactly 0** is the non-negative fit's boundary, not a measurement: that point is
+  interpolated from its neighbours and listed in provenance.json (*my choice*).
 - **Cold rows.**
   - At each SOC, ln R0 and ln R1 vs 1/T are fitted through 15 (at the logged ≈16.7 °C), 25 and 45 °C and evaluated
     at −30 to 10 °C (spec).
-  - Activation energies: R0 0.27–0.31 eV and R1 0.15–0.44 eV (new-OCV set); R0 0.28–0.32 eV and R1 0.19–0.64 eV
-    (team-OCV set).
+  - Activation energies (1RC sets): R0 0.27–0.31 eV and R1 0.14–0.46 eV (new-OCV set); R0 0.28–0.32 eV and R1
+    0.17–0.62 eV (team-OCV set). The 2RC sets' are under "2RC".
   - Error on these rows = value × the median relative Error of the measured rows at that SOC (*my choice*).
 
 ### Validation
-- Entire RPT and HPPC files are simulated row by row with the same simulator for all three sets.
+- Entire RPT and HPPC files are simulated row by row with the same simulator for all sets, with one RC branch or
+  two as the set's files say.
 - SOC is counted from the end of each rested full charge, where it is set to 1. Rows before the first full charge
   are counted back from it. SOC is never inferred from voltage (*my choice* for whole files, following the spec's
   rule for the start).
 - The OCV branch switches to the most recent current direction the moment the current changes (*my choice*).
-- 60 °C for all sets: OCV extended linearly in temperature from the 25 and 45 °C rows; R0, R1, τ1 by Arrhenius
-  through the 15/25/45 °C rows (*my choice*).
-- The mid-switch first row of every step is left out of the error statistics.
+- 60 °C for all sets: OCV extended linearly in temperature from the 25 and 45 °C rows; R0, R1, τ1 (and R2, τ2) by
+  Arrhenius through the 15/25/45 °C rows (*my choice*).
+- The rows the logger didn't capture (see "Reading the data") are left out of the error statistics.
 
 ---
 
 ## Checks
 
-`python3 -m pytest tests` runs 22 tests.
+`python3 -m pytest tests` runs 28 tests.
 
-- **Synthetic file.** An HPPC-shaped Neware file with:
+- **Synthetic 1RC file.** An HPPC-shaped Neware file with:
   - known R0, R1 and τ1 = 360 s;
   - realistic noise and logging;
   - mid-switch first rows;
@@ -356,11 +438,16 @@ Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set).
 
   The loader, SOC shift and fitter recover the known values. Without noise they come back to within 3 %. With
   noise, R0 is within 1 % and R1/τ1 are within the fit's own error bars.
+- **Synthetic 2RC file.** The same file with a slow branch (0.25 mΩ, 360 s) and a fast one (0.12 mΩ, 8 s). The
+  joint fit recovers both time constants and both resistances within 3 % without noise and 5 % with noise, keeps
+  one pair of resistances per SOC point, and beats the best single time constant on the same windows by more than
+  a factor of 2.
 - **Unit tests:**
   - sign flip;
   - sub-second time;
   - duplicated temperature headers;
-  - RC step response;
+  - RC step response, and the two-branch simulation as the sum of two step responses;
+  - the unusable-row rule (mid-switch first row, stale second row);
   - relaxation detection on a known exponential;
   - interpolation without overshoot;
   - per-sample OCV subtraction;

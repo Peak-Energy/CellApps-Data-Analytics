@@ -1,5 +1,6 @@
 """Figures written to outputs/<date>/figures/.
-Colours: team datapack = orange, new-OCV set = blue, team-OCV set = green."""
+Colours: team datapack = orange (dashed), new-OCV set = blue, team-OCV set = green, new-OCV 2RC set = indigo,
+team-OCV 2RC set = magenta (2RC sets dash-dotted). Palette checked for colour-vision separation."""
 from __future__ import annotations
 
 import numpy as np
@@ -10,8 +11,14 @@ import matplotlib.pyplot as plt
 from . import load
 
 INK, MUTED, SURF, SHADE = "#0b0b0b", "#52514e", "#fcfcfb", "#efeee9"
-NEW, ORIG, TEAMOCV = "#2a78d6", "#eb6834", "#1baf7a"
-SET_COLORS = {"team datapack": ORIG, "new OCV set": NEW, "team OCV set": TEAMOCV}
+NEW, ORIG, TEAMOCV, NEW2, TEAMOCV2 = "#2a78d6", "#eb6834", "#1baf7a", "#5a4b8a", "#d13c8f"
+SET_COLORS = {"team datapack": ORIG, "new OCV set": NEW, "team OCV set": TEAMOCV,
+              "new OCV 2RC set": NEW2, "team OCV 2RC set": TEAMOCV2}
+SET_STYLES = {"team datapack": (0, (3, 2)), "new OCV 2RC set": (0, (5, 1.5, 1, 1.5)), "team OCV 2RC set": (0, (5, 1.5, 1, 1.5))}
+
+
+def style(name):
+    return SET_STYLES.get(name, "-")
 PHASE_SHADES = ["#f4f3ef", "#e8eef7", "#f7efe8"]
 plt.rcParams.update({"figure.facecolor": SURF, "axes.facecolor": SURF, "axes.edgecolor": MUTED, "axes.labelcolor": INK,
                      "xtick.color": MUTED, "ytick.color": MUTED, "text.color": INK, "axes.grid": True,
@@ -64,7 +71,7 @@ def rc(tables, col, ylabel, path):
             g = t[t.Temperature == T]
             c = SET_COLORS[name]
             a_.fill_between(g.SOC, g[col] - g[e], g[col] + g[e], color=c, alpha=0.12, lw=0)
-            a_.plot(g.SOC, g[col], color=c, ls=(0, (3, 2)) if name == "team datapack" else "-", label=name)
+            a_.plot(g.SOC, g[col], color=c, ls=style(name), label=name)
         a_.set_yscale("log")
         a_.set_title(f"{T} °C — {'measured' if measured else 'Arrhenius-extrapolated'}", loc="left",
                      color=INK if measured else MUTED)
@@ -95,9 +102,9 @@ def whole_file(tr, sets, title, path, stats):
     for name in sets:
         v, _ = tr[(name, "SOC 1 at full charge")]
         c = SET_COLORS[name]
-        ax[0].plot(t, v, color=c, lw=0.9, label=name)
+        ax[0].plot(t, v, color=c, lw=0.9, ls=style(name), label=name)
         e = 1e3 * (v - V); e[first] = np.nan
-        ax[1].plot(t, e, color=c, lw=0.7, label=f"{name}: RMSE {stats[name]:.0f} mV")
+        ax[1].plot(t, e, color=c, lw=0.7, ls=style(name), label=f"{name}: RMSE {stats[name]:.0f} mV")
     ax[0].set_ylabel("V"); ax[0].legend(frameon=False, fontsize=8, loc="lower left")
     ax[1].set_ylim(-250, 250); ax[1].set_ylabel("model − measured (mV)\nband = ±50 mV")
     ax[1].legend(frameon=False, fontsize=8, loc="lower left")
@@ -116,7 +123,7 @@ def hppc_overview(traces, sets, stats, path):
         for s in sets:
             v, _ = tr[(s, "SOC 1 at full charge")]
             e = 1e3 * (v - V); e[first] = np.nan
-            a_.plot(t, e, color=SET_COLORS[s], lw=0.6, label=f"{s}: RMSE {stats[name][s]:.0f} mV")
+            a_.plot(t, e, color=SET_COLORS[s], lw=0.6, ls=style(s), label=f"{s}: RMSE {stats[name][s]:.0f} mV")
         a_.set_ylim(-250, 250); a_.set_ylabel("mV")
         a_.set_title(name, loc="left", fontsize=9, pad=14)
         a_.legend(frameon=False, fontsize=8, loc="lower left")
@@ -128,18 +135,18 @@ def hppc_overview(traces, sets, stats, path):
 def rpt_summary(whole, order, path):
     """Whole-file RMSE and 99th-percentile |error| on the held-out RPT cell, by temperature, one bar per set."""
     temps = [15, 25, 45, 60]
-    fig, ax = plt.subplots(1, 2, figsize=(13, 4.6))
-    w = 0.26
+    fig, ax = plt.subplots(1, 2, figsize=(14, 4.8))
+    w = 0.8 / len(order)
     for a, col, title in [(ax[0], "rmse_mV", "Whole-file RMSE (mV)"), (ax[1], "p99_mV", "99th percentile |error| (mV)")]:
         for k, s in enumerate(order):
             d = whole[whole.set == s].set_index("T")[col].reindex(temps)
-            x = np.arange(len(temps)) + (k - 1) * w
+            x = np.arange(len(temps)) + (k - (len(order) - 1) / 2) * w
             bars = a.bar(x, d.to_numpy(), w - 0.02, color=SET_COLORS[s], label=s, edgecolor=SURF, linewidth=1.0)
             for b_, v in zip(bars, d.to_numpy()):
                 a.text(b_.get_x() + b_.get_width() / 2, v, f"{v:.0f}" if col == "p99_mV" else f"{v:.1f}",
                        ha="center", va="bottom", fontsize=8, color=INK)
         a.set_xticks(np.arange(len(temps)), [f"{T} °C" + (" (outside fit)" if T == 60 else "") for T in temps])
         a.set_title(title, loc="left"); a.grid(axis="x", visible=False); a.set_axisbelow(True)
-    ax[0].legend(frameon=False, ncol=3, loc="upper left", bbox_to_anchor=(0, -0.1))
+    ax[0].legend(frameon=False, ncol=3, loc="upper left", bbox_to_anchor=(0, -0.1), fontsize=8)
     fig.suptitle("Held-out cell CS2D7485, entire RPT files simulated", x=0.01, ha="left", fontsize=10)
     fig.tight_layout(); fig.savefig(path, dpi=140); plt.close(fig)
