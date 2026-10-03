@@ -1,0 +1,4 @@
+Confidence Interval,power,k_0,coef_arrhenius,coef_tafel,degradation_per_cycle
+Best Fit,0.5,3.364612844455332,-13.77531482,-0.053910398,5.00E-06
+Plus 1.96 sigma (pessimistic),0.5,3.329090628643218,-13.73269879,-0.040783192,1.00E-05
+Minus 1.96 sigma (optimistic),0.5,5.744656151586646,-14.53187031,-0.054033589,2.50E-06
