@@ -61,7 +61,8 @@ Raw data (read-only): `~/Documents/Projects/Battery Modeling Data/Veken/Veken-B-
   - **SOC 0.** The rested voltage after a normal-rate discharge to 1.5 V.
   - **Gaps between GITT points.** Filled with the HPPC 2 h rest voltages of the same cells at 15 and 45 °C. At
     25 °C they're filled with the 15/45 °C curve shape, bent through the 25 °C GITT points.
-  - **Charge curve.** The discharge curve plus the measured charge/discharge gap.
+  - **Charge curve.** The GITT charge rests, with the same gap filling as the discharge curve, so the gap between
+    the two branches stays the one the GITT measured.
   - Details are under "OCV" in "Every decision, in plain words".
 - **Team-OCV set.** The team's `ocv.csv` exactly as it is in `cell-performance`. Where it comes from is described in
   "Where the team's OCV comes from".
@@ -161,6 +162,7 @@ Checked against the raw files and the `cell-performance` git history:
 | SOC 1 | RPT test cell, rested after a normal-rate charge | GITT cells, rested after a slow (C/20) charge | new is +22 / +58 / +15 mV at 15 / 25 / 45 °C |
 | SOC 0 | RPT test cell, rested after a normal-rate discharge (15/25 °C); GITT slow-discharge bottom (45 °C) | GITT cells, rested after a normal-rate discharge | 1.95 / 1.91 / 1.75 V new vs 1.86 / 1.84 / 1.62 V team |
 | Filling GITT gaps | none | HPPC 2 h rests (15/45 °C); 15/45 °C curve shape (25 °C) | at 45 °C the HPPC cells' rested voltage at 25 % SOC sits 9–10 mV above the team curve and within 1.3 mV of the new one |
+| Charge curve | GITT charge rests, interpolated directly | GITT charge rests, plus the same HPPC / 15–45 °C shape fill as the discharge curve. The gap to discharge is the one the GITT measured. | within 1.2 / 2.5 mV RMS of a direct interpolation at 15 / 45 °C, and within 1.7 mV of the 25 °C charge rests at 10–90 % SOC |
 
 ### New-OCV choices that were tested
 
@@ -255,9 +257,19 @@ Percentages are medians over 20–80 % SOC (new-OCV set / team-OCV set).
       the same cell's GITT curve. This cuts the mismatch from 3–6 mV to 1–3 mV (*my choice*).
     - An HPPC point is used only where no GITT point lies within 1 % SOC (*my choice*).
   - **25 °C:** the 15/45 °C discharge curve shape, bent through the 25 °C GITT points (DJ; tested above).
-- **Charge curve.** Discharge curve + the charge/discharge gap. At 15 and 45 °C the gap is measured by the GITT.
-  At 25 °C the GITT is too coarse, so the gap is taken from 15 and 45 °C and corrected to the 25 °C GITT values
-  between 10 and 90 % SOC (DJ).
+- **Charge curve.** Built from the GITT charge rests (DJ).
+  - **How.** The charge curve = the finished discharge curve + the gap between the GITT charge and discharge rests.
+    Where the discharge curve is pure GITT, this is exactly the curve through the GITT charge rests.
+  - **Why.** The HPPC rests exist only on the discharge branch, because every HPPC SOC move is a discharge. Filling
+    the discharge curve alone would make the charge/discharge gap jump wherever an HPPC point lands. Adding the
+    measured gap gives the charge curve the same filling and keeps the gap as the GITT measured it.
+  - **Effect.** Against a curve drawn straight through the charge rests (5–95 % SOC):
+    - 15 °C: RMS 1.2 mV, max 4.0 mV;
+    - 45 °C: RMS 2.5 mV, max 9.8 mV, at 25 % SOC;
+    - 25 °C: within 1.7 mV of the charge rests at 10–90 %, and up to 37 mV at 5 %. There is no 25 °C charge rest
+      between 0 and 9 % SOC, so the 15/45 °C shape is used there.
+  - **25 °C gap.** The 25 °C GITT is too coarse to measure the gap below 10 % and above 90 %. There it is taken from
+    15 and 45 °C, and between 10 and 90 % it is matched to the 25 °C GITT values.
 - **Smooth curve.** Points are joined with a shape-preserving interpolation (it can't overshoot between points)
   onto 1 % SOC steps (spec). All curves rise steadily with SOC.
 - **Top of the table.** At SOC 1 both branches are set to their average, as in the team file (DJ).
